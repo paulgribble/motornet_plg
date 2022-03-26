@@ -1,0 +1,10 @@
+brew install miniforge
+conda init zsh
+conda create --name motornet python=3.8
+conda activate motornet
+conda install numpy "libblas=*=*accelerate" -y
+conda install -c apple tensorflow-deps -y
+pip install tensorflow-macos
+conda install -c conda-forge -y pandas jupyter scikit-learn scipy matplotlib
+
+
