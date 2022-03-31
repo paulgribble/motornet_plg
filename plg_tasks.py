@@ -33,6 +33,8 @@ class CentreOutReachFF(Task):
         self.go_cue_range = [int(go_cue_range[0]), int(go_cue_range[1])]
         self.delay_range = self.go_cue_range
 
+        self.FF_matvel = np.array(kwargs.get('FF_matvel', [[0.,0.],[0.,0.]]))
+
     def generate(self, batch_size, n_timesteps, **kwargs):
         catch_trial = np.zeros(batch_size, dtype='float32')
         validation = kwargs.get('validation', False)
