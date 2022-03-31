@@ -66,7 +66,7 @@ class CentreOutReachFF(Task):
             if not validation:
                 go_cue_time = int(np.random.uniform(self.go_cue_range[0], self.go_cue_range[1]))
             else:
-                go_cue_time = 0.100
+                go_cue_time = int(0.100 / self.network.plant.dt)
 
             if catch_trial[i] > 0.:
                 targets[i, :, :] = center[i, np.newaxis, :]
