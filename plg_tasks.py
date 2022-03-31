@@ -33,7 +33,7 @@ class CentreOutReachFF(Task):
         self.go_cue_range = [int(go_cue_range[0]), int(go_cue_range[1])]
         self.delay_range = self.go_cue_range
 
-        self.FF_matvel = np.array(kwargs.get('FF_matvel', [[0.,0.],[0.,0.]]))
+        self.FF_matvel = tf.convert_to_tensor(kwargs.get('FF_matvel', np.array([[0,0],[0,0]])), dtype=tf.float32)
 
     def generate(self, batch_size, n_timesteps, **kwargs):
         catch_trial = np.zeros(batch_size, dtype='float32')
