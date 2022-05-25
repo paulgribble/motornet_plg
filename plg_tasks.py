@@ -3,16 +3,27 @@ import numpy as np
 import tensorflow as tf
 from motornet.nets.losses import PositionLoss, L2xDxActivationLoss, L2xDxRegularizer
 from motornet.tasks import Task, CentreOutReach
+from typing import Union
 
 class CentreOutReachFF(Task):
-    def __init__(self, network, **kwargs):
-        super().__init__(network, **kwargs)
-        self.__name__ = 'CentreOutReach'
+    def __init__(
+            self,
+            network,
+            name: str = 'CentreOutReach',
+            angular_step: float = 15,
+            catch_trial_perc: float = 50,
+            reaching_distance: float = 0.1,
+            start_position: Union[list, tuple, np.ndarray] = None,
+            deriv_weight: float = 0.,
+            go_cue_range: Union[list, tuple, np.ndarray] = (0.05, 0.25),
+            **kwargs
+    ):
 
-        self.angle_step = kwargs.get('reach_angle_step_deg', 15)
-        self.catch_trial_perc = kwargs.get('catch_trial_perc', 50)
-        self.reaching_distance = kwargs.get('reaching_distance', 0.1)
-        self.start_position = kwargs.get('start_joint_position', None)
+        super().__init__(network, **kwargs)
+        self.angular_step = angular_step
+        self.catch_trial_perc = catch_trial_perc
+        self.reaching_distance = reaching_distance
+        self.start_position = start_position
         if not self.start_position:
             # start at the center of the workspace
             lb = np.array(self.network.plant.pos_lower_bound)
@@ -20,24 +31,24 @@ class CentreOutReachFF(Task):
             self.start_position = lb + (ub - lb) / 2
         self.start_position = np.array(self.start_position).reshape(1, -1)
 
-        deriv_weight = kwargs.get('deriv_weight', 0.)
-        max_iso_force = self.network.plant.muscle.max_iso_force
-        dt = self.network.plant.dt
-        muscle_loss = L2xDxActivationLoss(max_iso_force=max_iso_force, dt=dt, deriv_weight=deriv_weight)
+        muscle_loss = L2xDxActivationLoss(
+            max_iso_force=self.network.plant.muscle.max_iso_force,
+            dt=self.network.plant.dt,
+            deriv_weight=deriv_weight
+        )
         gru_loss = L2xDxRegularizer(deriv_weight=0.05, dt=self.network.plant.dt)
-        self.add_loss('gru_hidden0', loss_weight=0.1, loss=gru_loss)
+        self.add_loss('gru_hidden_0', loss_weight=0.1, loss=gru_loss)
         self.add_loss('muscle state', loss_weight=5, loss=muscle_loss)
         self.add_loss('cartesian position', loss_weight=1., loss=PositionLoss())
 
-        go_cue_range = np.array(kwargs.get('go_cue_range', [0.05, 0.25])) / dt
+        go_cue_range = np.array(go_cue_range) / self.network.plant.dt
         self.go_cue_range = [int(go_cue_range[0]), int(go_cue_range[1])]
         self.delay_range = self.go_cue_range
 
         self.FF_matvel = tf.convert_to_tensor(kwargs.get('FF_matvel', np.array([[0,0],[0,0]])), dtype=tf.float32)
 
-    def generate(self, batch_size, n_timesteps, **kwargs):
+    def generate(self, batch_size, n_timesteps, validation: bool = False):
         catch_trial = np.zeros(batch_size, dtype='float32')
-        validation = kwargs.get('validation', False)
         if not validation:
             init_states = self.get_initial_state(batch_size=batch_size)
             goal_states_j = self.network.plant.draw_random_uniform_states(batch_size=batch_size)
@@ -45,7 +56,7 @@ class CentreOutReachFF(Task):
             p = int(np.floor(batch_size * self.catch_trial_perc / 100))
             catch_trial[np.random.permutation(catch_trial.size)[:p]] = 1.
         else:
-            angle_set = np.deg2rad(np.arange(0, 360, self.angle_step))
+            angle_set = np.deg2rad(np.arange(0, 360, self.angular_step))
             reps = int(np.ceil(batch_size / len(angle_set)))
             angle = np.tile(angle_set, reps=reps)
             batch_size = reps * len(angle_set)
@@ -61,12 +72,13 @@ class CentreOutReachFF(Task):
         go_cue = np.ones([batch_size, n_timesteps, 1])
         targets = self.network.plant.state2target(state=goal_states, n_timesteps=n_timesteps).numpy()
         inputs_targ = copy.deepcopy(targets[:, :, :self.network.plant.space_dim])
-        inputs_start = copy.deepcopy(np.repeat(center[:, np.newaxis, :self.network.plant.space_dim], n_timesteps, axis=1))
+        tmp = np.repeat(center[:, np.newaxis, :self.network.plant.space_dim], n_timesteps, axis=1)
+        inputs_start = copy.deepcopy(tmp)
         for i in range(batch_size):
             if not validation:
                 go_cue_time = int(np.random.uniform(self.go_cue_range[0], self.go_cue_range[1]))
             else:
-                go_cue_time = int(0.150 / self.network.plant.dt)
+                go_cue_time = int(self.go_cue_range[0] + np.diff(self.go_cue_range) / 2)
 
             if catch_trial[i] > 0.:
                 targets[i, :, :] = center[i, np.newaxis, :]
@@ -75,8 +87,10 @@ class CentreOutReachFF(Task):
                 inputs_start[i, go_cue_time + self.network.visual_delay:, :] = 0.
                 go_cue[i, go_cue_time + self.network.visual_delay:, 0] = 0.
 
-        return [{"inputs": np.concatenate([inputs_start, inputs_targ, go_cue], axis=-1)},
-                self.convert_to_tensor(targets), init_states]
+        return [
+            {"inputs": np.concatenate([inputs_start, inputs_targ, go_cue], axis=-1)},
+            self.convert_to_tensor(targets), init_states
+        ]
 
     def recompute_inputs(self, inputs, states):
         jstate, cstate, mstate, gstate = self.network.unpack_plant_states(states)
