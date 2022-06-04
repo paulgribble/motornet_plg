@@ -2,15 +2,21 @@
 
 # without relying on anaconda:
 
-python3 -m venv motornet_env
-source motornet_env/bin/activate
-cd motornet_env/
-python -m pip install -U pip
-pip install tensorflow-macos
+python3 -m venv ~/venvs/motornet_env
+source ~/venvs/motornet_env/bin/activate
+python3 -m pip install -U pip
+pip install motornet
+
+# optional stuff for plg using VSCode
+pip install ipykernel notebook jupyter
+
+
+
+
+###########
+
+# pip install tensorflow-macos
 # pip install tensorflow-metal # for GPU-based stuff
-
-
-
 
 #first install anaconda
 #then conda create --name motornet python=3.8
