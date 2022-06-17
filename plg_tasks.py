@@ -47,7 +47,7 @@ class CentreOutReachFF(Task):
 
         self.FF_matvel = tf.convert_to_tensor(kwargs.get('FF_matvel', np.array([[0,0],[0,0]])), dtype=tf.float32)
 
-    def generate(self, batch_size, n_timesteps, validation: bool = False):
+    def generate(self, batch_size, n_timesteps, validation: bool = False, validation_train: bool = False):
         catch_trial = np.zeros(batch_size, dtype='float32')
         if not validation:
             init_states = self.get_initial_state(batch_size=batch_size)
@@ -75,7 +75,7 @@ class CentreOutReachFF(Task):
         tmp = np.repeat(center[:, np.newaxis, :self.network.plant.space_dim], n_timesteps, axis=1)
         inputs_start = copy.deepcopy(tmp)
         for i in range(batch_size):
-            if not validation:
+            if (validation == False) or (validation_train == True):
                 go_cue_time = int(np.random.uniform(self.go_cue_range[0], self.go_cue_range[1]))
             else:
                 go_cue_time = int(self.go_cue_range[0] + np.diff(self.go_cue_range) / 2)
