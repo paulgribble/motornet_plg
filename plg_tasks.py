@@ -1,7 +1,7 @@
 import copy
 import numpy as np
 import tensorflow as tf
-from motornet.nets.losses import PositionLoss, L2xDxActivationLoss, L2xDxRegularizer
+from motornet.nets.losses import PositionLoss, L2xDxActivationLoss, L2xDxRegularizer, CompoundedLoss
 from motornet.tasks import Task, CentreOutReach
 from typing import Union
 import time
@@ -65,7 +65,7 @@ class CentreOutFF(CentreOutReach):
             if ((condition=="train") or (condition=="adapt")):
                 go_cue_time = int(np.random.uniform(self.go_cue_range[0], self.go_cue_range[1]))
             elif (condition=="test"):
-                go_cue_time = int(self.go_cue_range[0] + np.diff(self.go_cue_range) / 2)
+                go_cue_time = int(self.go_cue_range[0])
             if catch_trial[i] > 0.:
                 targets[i, :, :] = startpos[i, np.newaxis, :]
             else:
