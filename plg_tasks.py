@@ -2,18 +2,53 @@ import copy
 import numpy as np
 import tensorflow as tf
 from motornet.nets.losses import PositionLoss, L2xDxActivationLoss, L2xDxRegularizer, CompoundedLoss
-from motornet.tasks import Task, CentreOutReach
+from motornet.tasks import Task
 from typing import Union
 import time
 
-class CentreOutFF(CentreOutReach):
+class CentreOutFF(Task):
     def __init__(
             self,
             network,
-            name: str = 'CentreOutFF',
+            name: str = 'CentreOutReach',
+            angular_step: float = 15,
+            catch_trial_perc: float = 50,
+            reaching_distance: float = 0.1,
+            start_position: Union[list, tuple, np.ndarray] = None,
+            deriv_weight: float = 0.,
+            go_cue_range: Union[list, tuple, np.ndarray] = (0.05, 0.25),
             **kwargs
     ):
-        super().__init__(network, **kwargs)
+
+        super().__init__(network, name=name, **kwargs)
+
+        self.angular_step = angular_step
+        self.catch_trial_perc = catch_trial_perc
+        self.reaching_distance = reaching_distance
+        self.start_position = start_position
+        if not self.start_position:
+            # start at the center of the workspace
+            lb = np.array(self.network.plant.pos_lower_bound)
+            ub = np.array(self.network.plant.pos_upper_bound)
+            self.start_position = lb + (ub - lb) / 2
+        self.start_position = np.array(self.start_position).reshape(1, -1)
+
+        muscle_loss = L2xDxActivationLoss(
+            max_iso_force=self.network.plant.muscle.max_iso_force,
+            dt=self.network.plant.dt,
+            deriv_weight=deriv_weight
+        )
+        self.add_loss('muscle state',       loss_weight=5.0, loss=muscle_loss)          # 5.0
+
+        gru_loss = L2xDxRegularizer(       deriv_weight=0.05, dt=self.network.plant.dt) # 0.05
+        self.add_loss('gru_hidden_0',       loss_weight=0.1, loss=gru_loss)             # 0.1
+
+        self.add_loss('cartesian position', loss_weight=1.0, loss=PositionLoss())       # 1.0
+
+        go_cue_range = np.array(go_cue_range) / self.network.plant.dt
+        self.go_cue_range = [int(go_cue_range[0]), int(go_cue_range[1])]
+        self.delay_range = self.go_cue_range
+
         self.FF_matvel = tf.convert_to_tensor(kwargs.get('FF_matvel', np.array([[0,0],[0,0]])), dtype=tf.float32)
 
     def generate(self, batch_size, n_timesteps, condition="test"):
